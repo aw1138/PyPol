@@ -18,17 +18,19 @@ from astropy.units import cds
 ## main import
 from PyPol import PyPol
 
-#
+# import the needed filters
 redfils = {'filters':['R', 'I'], 'paths':['fils/R.fil', 'fils/I.fil']}
 bluefils = {'filters':['U', 'B'], 'paths':['fils/UX.fil', 'fils/B.fil']}
 
 fils = [redfils, bluefils]
 
+# make the overarching class object
 test = PyPol('example/data/*r_*.fits', 'example/data/*b_*.fits')
 
 # # without ism removal
 
-# test_table = test.find_pol(fils, 18.59773, 'HPOL_Sys_Err_Aislynn.txt')
+# make table with all the data
+# test_table = test.find_pol(fils, 18.59773, 'example/data/HPOL_Sys_Err_Aislynn.txt')
 
 # print(test_table[:10])
 
@@ -42,6 +44,7 @@ teststars = candi.drop(index=[1, 7])
 
 ismstars = (teststars['POL'], teststars['PA'].values, teststars['Pol-e'])
 
+# create the table with all the data
 test_ism = test.find_pol(fils, 18.59773, 'example/data/HPOL_Sys_Err_Aislynn.txt', ism=True, stars=ismstars)
 
 print(test_ism[:10])
