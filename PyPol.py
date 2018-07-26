@@ -12,8 +12,9 @@ from astropy import time, coordinates as coord, units as u
 from astropy.units import imperial
 from astropy.units import cds
 
-sys_err = pd.read_table('HPOL_Sys_Err_Aislynn.txt', sep=' ') 
-v_fil = pd.read_table('../filters/V.fil', sep='  ', names=['wavelength', 'weight'], engine='python')
+sys_err = pd.read_table('example/data/HPOL_Sys_Err_Aislynn.txt', sep=' ') 
+v_fil = pd.read_table('fils/V.fil', sep='  ', names=['wavelength', 'weight'], engine='python')
+
 
 class PyPol(object):
     

@@ -9,7 +9,7 @@ Currently, it can make polarimetric light curves from U Wisconsin HPOL data for 
 
 The culmination (and really the only thing you need to run) is the find_pol function.
 
-#### On the update to do list is:
+### On the update to do list is:
 
 - allowing for different targets and observatories
 - adding plotting capability for the lcs
