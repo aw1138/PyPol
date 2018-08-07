@@ -44,7 +44,7 @@ class PyPol(object):
     def get_times(self, path):
         """
         Pulls UTC and MJD times out of a fits file. (Meant to be 
-        used in conjunction with the map built-in function.)
+        used in conjunction with the find_hjd function.)
         
         Parameters:
         -----------
@@ -71,6 +71,7 @@ class PyPol(object):
         Finds the heliocentric julian date for observations from the
         modified julian date. Parameters are containted in the parent object. 
         
+        (This function has no additional parameters.)
         """
         # create some empty dictionaries to store information
         bobs = {}
@@ -151,21 +152,24 @@ class PyPol(object):
         
         return jd
         
-    def calc_pol(self, tup, sys_err=sys_err):
+    def calc_pol(self, fil, path, sys_err=sys_err):
         """
         A function that will calculate the angle and amount of polarized light
         given a false filter and a path to spectra data. (Meant to be 
-        used in conjunction with the map built-in function.)
+        used in conjunction with the find_pol function.)
 
         Parameters:
         -----------
 
-        tup: tuple, list of tuples
-            A tuple or list of tuples of the form (filter, path). These are 
-            used to obtain all relevant information that's needed.
+        fil: table, dictionary, DataFrame
+            The filter parameters to calulate polarization within. Johnson 
+            filters are included.
+        path: string
+            Path to a single data to calculate the polarization with.
+        sys_err: table, dictionary, DataFrame
+            Systematic errors for the instrument organized as a table with the
+            start dates, end dates, and values for those time periods.
         """
-        fil, path = tup
-        # tuple to make the map function work later
 
         # load in the table and its data
         table = fits.open(path)
@@ -273,7 +277,7 @@ class PyPol(object):
     def v_band_pol(self, tup, fil=v_fil, sys_err=sys_err):
         """
         A function to do polarimetry in only the V band. (Meant to be 
-        used in conjunction with the map built-in function.)
+        used in conjunction with the find_pol function.)
 
         Parameters:
         -----------
@@ -403,10 +407,17 @@ class PyPol(object):
             Period of the system. Used to calculate phase.
         sys_err: string
             Path to a file containing the system error values between start and end dates.
-        save: bool
-            Default is False. Set to True if you want to save the table to your computer.
+        save: boolean
+            Determines whether the output table is to be saved. Default is False.
         filename: string
             Path + file name to save under.
+        ism: boolean
+            Determines whether the ISM background polarization is to be removed. Default is
+            False.
+        stars: list of tuples
+            A tuple of the form (polarization, position angle, pol error) for each of the 
+            chosen ISM reference stars. If there is more than one reference star, it should 
+            be a list of tuples of that form.
         """
         sys_err = pd.read_table(sys_err, sep=' ') 
         
@@ -415,132 +426,66 @@ class PyPol(object):
         # create empty placeholder dictionary
         rmags = {}
 
-        if ism is True:
-            # for every red filter, get all the things from calc_pol
-            for i, v in enumerate(red['paths']):
-                fil = pd.read_table(v, sep='  ', names=['wavelength', 'weight'], engine='python')
-                fil.index.name = red['filters'][i]+'_Band'
+        # for every red filter, get all the things from calc_pol_noism
+        for i, v in enumerate(red['paths']):
+            fil = pd.read_table(v, sep='  ', names=['wavelength', 'weight'], engine='python')
+            fil.index.name = red['filters'][i]+'_Band'
 
-                # create a list of tuples with (i_fil, filename)
-                prod = itertools.product([fil], self.rfiles)
-                # map the function to the list of tuples
-                rmags[red['filters'][i]+'pol'] = [i for i,j,k,l,m in 
-                                                  [self.calc_pol_noism(x, stars) for x in prod]]
+            rmags[red['filters'][i]+'pol'] = []
+            rmags[red['filters'][i]+'PA'] = []
+            rmags[red['filters'][i]+'pol_err'] = []
+            rmags[red['filters'][i]+'PA_err'] = []
+            rmags['date'] = []
+            
+            # calc pol then add to dictionary column
+            for rfile in self.rfiles:
+                # use different func if removing ism
+                if ism is True:
+                    mags = self.calc_pol_noism(fil, rfile, stars)
+                else:
+                    mags = self.calc_pol(fil, rfile)
 
-                # for some reason you have to define it again or it doesn't work
-                prod = itertools.product([fil], self.rfiles)
-                rmags[red['filters'][i]+'PA'] = [j for i,j,k,l,m in 
-                                                 [self.calc_pol_noism(x, stars) for x in prod]]
+                rmags[red['filters'][i]+'pol'].append(mags[0])
+                rmags[red['filters'][i]+'PA'].append(mags[1])
+                rmags[red['filters'][i]+'pol_err'].append(mags[3])
+                rmags[red['filters'][i]+'PA_err'].append(mags[4])
+                rmags['date'].append(mags[2])
 
-                # create a list of tuples with (i_fil, filename)
-                prod = itertools.product([fil], self.rfiles)
-                # map the function to the list of tuples
-                rmags[red['filters'][i]+'pol_err'] = [l for i,j,k,l,m in 
-                                                      [self.calc_pol_noism(x, stars) for x in prod]]
-
-                # for some reason you have to define it again or it doesn't work
-                prod = itertools.product([fil], self.rfiles)
-                rmags[red['filters'][i]+'PA_err'] = [m for i,j,k,l,m in 
-                                                     [self.calc_pol_noism(x, stars) for x in prod]]
-
-                prod = itertools.product([fil], self.rfiles)
-                rmags['date'] = [k for i,j,k,l,m in [self.calc_pol_noism(x, stars) for x in prod]]
-
-        else:
-            # for every red filter, get all the things from calc_pol
-            for i, v in enumerate(red['paths']):
-                fil = pd.read_table(v, sep='  ', names=['wavelength', 'weight'], engine='python')
-                fil.index.name = red['filters'][i]+'_Band'
-
-                # create a list of tuples with (i_fil, filename)
-                prod = itertools.product([fil], self.rfiles)
-                # map the function to the list of tuples
-                rmags[red['filters'][i]+'pol'] = [i for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-                # for some reason you have to define it again or it doesn't work
-                prod = itertools.product([fil], self.rfiles)
-                rmags[red['filters'][i]+'PA'] = [j for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-                # create a list of tuples with (i_fil, filename)
-                prod = itertools.product([fil], self.rfiles)
-                # map the function to the list of tuples
-                rmags[red['filters'][i]+'pol_err'] = [l for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-                # for some reason you have to define it again or it doesn't work
-                prod = itertools.product([fil], self.rfiles)
-                rmags[red['filters'][i]+'PA_err'] = [m for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-                prod = itertools.product([fil], self.rfiles)
-                rmags['date'] = [k for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-        # convert to DataFrame
-        rmags = pd.DataFrame(rmags)
+        # convert dict to DataFrame
+        rmags = pd.DataFrame.from_dict(rmags)
 
         ## get blue filter mags
         blue = fils[1]
         # create empty placeholder dictionary
         bmags = {}
 
-        if ism is True:
-            # for every blue filter, get all the things from calc_pol
-            for i, v in enumerate(blue['paths']):
-                fil = pd.read_table(v, sep='  ', names=['wavelength', 'weight'], engine='python')
-                fil.index.name = blue['filters'][i]+'_Band'
+        # for every blue filter, get all the things from calc_pol
+        for i, v in enumerate(blue['paths']):
+            fil = pd.read_table(v, sep='  ', names=['wavelength', 'weight'], engine='python')
+            fil.index.name = blue['filters'][i]+'_Band'
 
-                # create a list of tuples with (i_fil, filename)
-                prod = itertools.product([fil], self.bfiles)
-                # map the function to the list of tuples
-                bmags[blue['filters'][i]+'pol'] = [i for i,j,k,l,m in
-                                                   [self.calc_pol_noism(x, stars) for x in prod]]
+            bmags[blue['filters'][i]+'pol'] = []
+            bmags[blue['filters'][i]+'PA'] = []
+            bmags[blue['filters'][i]+'pol_err'] = []
+            bmags[blue['filters'][i]+'PA_err'] = []
+            bmags['date'] = []
 
-                # for some reason you have to define it again or it doesn't work
-                prod = itertools.product([fil], self.bfiles)
-                bmags[blue['filters'][i]+'PA'] = [j for i,j,k,l,m in 
-                                                  [self.calc_pol_noism(x, stars) for x in prod]]
+            # calc pol then add to dictionary column
+            for bfile in self.bfiles:
+                # use diff func if removing ism
+                if ism is True:
+                    mags = self.calc_pol_noism(fil, bfile, stars)
+                else:
+                    mags = self.calc_pol(fil, bfile)
 
-                # create a list of tuples with (i_fil, filename)
-                prod = itertools.product([fil], self.bfiles)
-                # map the function to the list of tuples
-                bmags[blue['filters'][i]+'pol_err'] = [l for i,j,k,l,m in 
-                                                       [self.calc_pol_noism(x, stars) for x in prod]]
-
-                # for some reason you have to define it again or it doesn't work
-                prod = itertools.product([fil], self.bfiles)
-                bmags[blue['filters'][i]+'PA_err'] = [m for i,j,k,l,m in 
-                                                      [self.calc_pol_noism(x, stars) for x in prod]]
-
-                prod = itertools.product([fil], self.bfiles)
-                bmags['date'] = [k for i,j,k,l,m in [self.calc_pol_noism(x, stars) for x in prod]]
-        
-        else:
-            # for every blue filter, get all the things from calc_pol
-            for i, v in enumerate(blue['paths']):
-                fil = pd.read_table(v, sep='  ', names=['wavelength', 'weight'], engine='python')
-                fil.index.name = blue['filters'][i]+'_Band'
-
-                # create a list of tuples with (i_fil, filename)
-                prod = itertools.product([fil], self.bfiles)
-                # map the function to the list of tuples
-                bmags[blue['filters'][i]+'pol'] = [i for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-                # for some reason you have to define it again or it doesn't work
-                prod = itertools.product([fil], self.bfiles)
-                bmags[blue['filters'][i]+'PA'] = [j for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-                # create a list of tuples with (i_fil, filename)
-                prod = itertools.product([fil], self.bfiles)
-                # map the function to the list of tuples
-                bmags[blue['filters'][i]+'pol_err'] = [l for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-                # for some reason you have to define it again or it doesn't work
-                prod = itertools.product([fil], self.bfiles)
-                bmags[blue['filters'][i]+'PA_err'] = [m for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
-                prod = itertools.product([fil], self.bfiles)
-                bmags['date'] = [k for i,j,k,l,m in list(map(self.calc_pol, prod))]
-
+                bmags[blue['filters'][i]+'pol'].append(mags[0])
+                bmags[blue['filters'][i]+'PA'].append(mags[1])
+                bmags[blue['filters'][i]+'pol_err'].append(mags[3])
+                bmags[blue['filters'][i]+'PA_err'].append(mags[4])
+                bmags['date'].append(mags[2])
+                    
         # turn the placeholder into a pandas DataFrame
-        bmags = pd.DataFrame(bmags)
+        bmags = pd.DataFrame.from_dict(bmags)
 
         ## get the v filter mags
 
@@ -558,14 +503,29 @@ class PyPol(object):
         vmags = {}
 
         # fill it with the values from the function
-        vmags['Vpol'] = [i for i,j,k,l,m in list(map(self.v_band_pol, file_tup))]
-        vmags['VPA'] = [j for i,j,k,l,m in list(map(self.v_band_pol, file_tup))]
-        vmags['date'] = [k for i,j,k,l,m in list(map(self.v_band_pol, file_tup))]
-        vmags['Vpol_err'] = [l for i,j,k,l,m in list(map(self.v_band_pol, file_tup))]
-        vmags['VPA_err'] = [m for i,j,k,l,m in list(map(self.v_band_pol, file_tup))]
+
+        vmags['Vpol'] = []
+        vmags['VPA'] = []
+        vmags['Vpol_err'] = []
+        vmags['VPA_err'] = []
+        vmags['date'] = []
+
+        # calc pol then add to dictionary column
+        for pair in file_tup:
+            # diff function choice if removing ism
+            if ism is True:
+                mags = self.v_pol_noism(pair, stars)
+            else:
+                mags = self.v_band_pol(pair)
+                
+            vmags['Vpol'].append(mags[0])
+            vmags['VPA'].append(mags[1])
+            vmags['Vpol_err'].append(mags[3])
+            vmags['VPA_err'].append(mags[4])
+            vmags['date'].append(mags[2])
 
         # convert placeholder to a DataFrame
-        vmags = pd.DataFrame(vmags)
+        vmags = pd.DataFrame.from_dict(vmags)
 
         # merge r, b, and v tables
         final = pd.merge(rmags, bmags, how='outer', on=['date'])
@@ -590,10 +550,6 @@ class PyPol(object):
                 final.to_csv(filename)
 
         return final
-        
-    def plot_lcs(self):
-        
-        print('placeholder')
         
     def weighted_avg(self, values, weights):
         """
@@ -647,13 +603,13 @@ class PyPol(object):
         # convert back to q and u
         
         # q=pol*cos(2*position angle)
-        ism_q = ism_pol[0] * np.cos(2 * ism_pa.to(u.rad).value)
+        ism_q = ism_pol * np.cos(2 * ism_pa.to(u.rad).value)
         # u=pol*sin(2*position angle)
-        ism_u = ism_pol[0] * np.sin(2 * ism_pa.to(u.rad).value)
+        ism_u = ism_pol * np.sin(2 * ism_pa.to(u.rad).value)
         
         return ism_pol, ism_pa, ism_q, ism_u
     
-    def calc_pol_noism(self, target, stars, sys_err=sys_err):
+    def calc_pol_noism(self, fil, path, stars, sys_err=sys_err):
         """
         A function that will calculate the angle and amount of polarized light
         given a false filter and a path to spectra data. (Meant to be 
@@ -662,16 +618,19 @@ class PyPol(object):
         Parameters:
         -----------
 
-        target: tuple, list of tuples
-            A tuple or list of tuples of the form (filter, path). These are 
-            used to obtain all relevant information that's needed.
-        stars: table, dictionary
-            A table or dictionary of chosen ISM stars' data. Must include 
-            'err', 'pol', and 'pa' columns.
+        fil: table, dictionary, DataFrame
+            The filter parameters to calulate polarization within. Johnson 
+            filters are included.
+        path: string
+            Path to a single data to calculate the polarization with.
+        stars: list of tuples
+            A tuple of the form (polarization, position angle, pol error) for each of the 
+            chosen ISM reference stars. If there is more than one reference star, it should 
+            be a list of tuples of that form.
+        sys_err: table, dictionary, DataFrame
+            Systematic errors for the instrument organized as a table with the
+            start dates, end dates, and values for those time periods.
         """
-        fil, path = target
-        # tuple to make the map function work later
-
         # load in the table and its data
         table = fits.open(path)
         table_data = table[1].data
@@ -765,8 +724,12 @@ class PyPol(object):
         -----------
 
         tup: tuple of strings
-            A tuple of the form (red files path, blue files path).
-
+            A tuple of the form (red files path, blue files path). These are the
+            red and blue spectra of matching dates to use for the V filter calcs.
+        stars: list of tuples
+            A tuple of the form (polarization, position angle, pol error) for each of the 
+            chosen ISM reference stars. If there is more than one reference star, it should 
+            be a list of tuples of that form.
         fil: dictionary or DataFrame
             The filter the calculations will be done for. Default is the V filter.
         """
@@ -808,14 +771,16 @@ class PyPol(object):
         stars_pol, stars_pa, stars_err = stars
         ism_pol, ism_pa, ism_q, ism_u = self.calc_ism(stars_pol, stars_pa, stars_err, 
                                                       k=0.8486, wave_max=5100,
-                                                      wavelen=table_data[0]['wavelength'])
+                                                      wavelen=data['wavelength'])
         
         # get the filter wavelength weights
         vweights = np.interp(data['wavelength'], v_fil['wavelength'], 
                                 v_fil['weight'], left=0, right=0)
 
+
         # get the weight for q
         qog = data['q'] - ism_q
+
         qweight = qog * data['flux'] * vweights
         # sum them
         qsum = np.trapz(qweight, data['wavelength'])
@@ -841,7 +806,7 @@ class PyPol(object):
         pol_tot = np.sqrt(qval**2 + uval**2)
 
         # get the position angle
-        pos_ang = 0.5 * np.arctan2(u, q) * u.rad
+        pos_ang = 0.5 * np.arctan2(uval, qval) * u.rad
         pos_ang = pos_ang.to(u.deg).value
 
         # get the date for later
@@ -882,3 +847,6 @@ class PyPol(object):
 
         return pol_tot, pos_ang, date, errpol.values[0], errang.values[0]
 
+    def plot_lcs(self):
+        
+        print('placeholder')
