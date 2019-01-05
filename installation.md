@@ -6,4 +6,3 @@
 - pandas
 - astropy
 - matplotlib
-- itertools
