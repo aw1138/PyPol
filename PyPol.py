@@ -15,7 +15,6 @@ from astropy.units import cds
 sys_err = pd.read_table('example/data/HPOL_Sys_Err_Aislynn.txt', sep=' ') 
 v_fil = pd.read_table('fils/V.fil', sep='  ', names=['wavelength', 'weight'], engine='python')
 
-
 class PyPol(object):
     
     """
@@ -155,7 +154,7 @@ class PyPol(object):
     def calc_pol(self, fil, path, sys_err=sys_err):
         """
         A function that will calculate the angle and amount of polarized light
-        given a false filter and a path to spectra data. (Meant to be 
+        given filter parameters and a path to spectra data. (Meant to be 
         used in conjunction with the find_pol function.)
 
         Parameters:
@@ -588,15 +587,38 @@ class PyPol(object):
         # take a weighted average
         qism_avg = self.weighted_avg(qism, weights)
         uism_avg = self.weighted_avg(uism, weights)
-
         # calc pol, pa from q and u
         
         # pol = sqrt(q**2 + u**2)
         ism_pmax = np.sqrt(qism_avg**2 + uism_avg**2)
+        
         # pa = 1/2 * arctan(u/q)
         ism_pa = 1/2 * np.arctan2(uism_avg, qism_avg)
         ism_pa = (ism_pa * u.rad).to(u.deg)
 
+        # find pol per wavelength
+        ism_pol = ism_pmax * np.exp(-k * (np.log10(wave_max/wavelen)**2))
+        
+        # convert back to q and u
+        
+        # q=pol*cos(2*position angle)
+        ism_q = ism_pol * np.cos(2 * ism_pa.to(u.rad).value)
+        # u=pol*sin(2*position angle)
+        ism_u = ism_pol * np.sin(2 * ism_pa.to(u.rad).value)
+        
+#         print(ism_pmax)
+#         print(wavelen, ism_q, ism_u)
+        
+        return ism_pol, ism_pa, ism_q, ism_u
+    
+    def calc_ism_from_pol(self, ism_pmax, ism_pa, k, wave_max, wavelen):
+        """
+        Calculates average ISM polarization from max polarization and position
+        angle. Mostly here for testing against archival analyses.
+        
+        Parameters:
+        -----------
+        """
         # find pol per wavelength
         ism_pol = ism_pmax * np.exp(-k * (np.log10(wave_max/wavelen)**2))
         
@@ -640,14 +662,25 @@ class PyPol(object):
         ism_pol, ism_pa, ism_q, ism_u = self.calc_ism(stars_pol, stars_pa, stars_err, 
                                                       k=0.8486, wave_max=5100,
                                                       wavelen=table_data[0]['wavelength'])
+# these exist for testing purposes
+
+#         ism_pol, ism_pa, ism_q, ism_u = self.calc_ism_from_pol(0.93, 149*u.degree, k=1.15, 
+#                                                                wave_max=5100, 
+#                                                                wavelen=table_data[0]['wavelength'])
+
+#         ism_pol, ism_pa, ism_q, ism_u = self.calc_ism_from_pol(0.1886, 71.58*u.degree, k=0.8486, 
+#                                                                wave_max=5100, 
+#                                                                wavelen=table_data[0]['wavelength'])
+
         
+#         print(ism_pol, ism_pa, ism_q, ism_u)
         # get the filter-wavelength weight
         weights = np.interp(table_data[0]['wavelength'], fil['wavelength'],
                                  fil['weight'], left=0, right=0)
         # define the flux
         flux = table[0].data
 
-        qog = table_data[0]['q'] - ism_pol[0]
+        qog = table_data[0]['q'] - ism_q#[0] # found part of the problem: was -ism_pol
         
         # get the flux weight for q
         qweight = qog * flux * weights
@@ -662,8 +695,8 @@ class PyPol(object):
         # find q
         qval = qsum / fsum
 
-        uog = table_data[0]['u'] - ism_pol[0]
-
+        uog = table_data[0]['u'] - ism_u#[0]
+        
         # get the flux weight for u
         uweight = uog * flux * weights
         # sum it
@@ -773,6 +806,14 @@ class PyPol(object):
                                                       k=0.8486, wave_max=5100,
                                                       wavelen=data['wavelength'])
         
+# these exist for testing purposes
+#         ism_pol, ism_pa, ism_q, ism_u = self.calc_ism_from_pol(0.93, 149*u.degree, k=1.15, 
+#                                                                wave_max=5100, wavelen=data['wavelength'])
+
+#         ism_pol, ism_pa, ism_q, ism_u = self.calc_ism_from_pol(0.1886, 71.58*u.degree, k=0.8486, 
+#                                                                wave_max=5100, wavelen=data['wavelength'])
+
+
         # get the filter wavelength weights
         vweights = np.interp(data['wavelength'], v_fil['wavelength'], 
                                 v_fil['weight'], left=0, right=0)
