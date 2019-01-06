@@ -14,3 +14,4 @@ The culmination (and really the only thing you need to run) is the find_pol func
 - allowing for different targets and observatories
 - adding plotting capability for the lcs
 - streamlining and simplifying (mostly get_pol)
+- modify filter input method
