@@ -5,7 +5,7 @@ PyPol is a Python module made specifically to work with spectropolarimetric data
 
 ### What it does:
 
-Currently, it can make polarimetric light curves from U Wisconsin HPOL data for the system V367 Cyg (with and without ISM polrization removal). I'm working on making it able to work with other observatories and targets soon.
+Currently, it can make spectrapolarimetric light curves from U Wisconsin HPOL data for the system V367 Cyg (with and without ISP removal). I'm working on making it able to work with other observatories and targets soon.
 
 The culmination (and really the only thing you need to run) is the find_pol function.
 
